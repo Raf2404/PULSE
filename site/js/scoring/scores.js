@@ -6,6 +6,7 @@
  */
 import { CONFIG } from './config.js';
 import { clamp, mean, median, present, round, sd, sum } from './stats.js';
+import { cyclePhases } from './cycle.js';
 
 /** @typedef {import('./daily.js').DayPhys} DayPhys */
 
@@ -51,6 +52,7 @@ import { clamp, mean, median, present, round, sd, sum } from './stats.js';
  * @property {number | null} acwr
  * @property {{ kind: 'strain' | 'load', text: string } | null} alert
  * @property {number | null} tempDelta
+ * @property {{ day: number, phase: import('./cycle.js').CyclePhase } | null} cycle jour et phase du cycle (si suivi)
  */
 
 /** @typedef {DayPhys & DayScores} DayRecord */
@@ -159,10 +161,12 @@ export function targetPoint(recovery) {
 /**
  * Calcule les scores de tous les jours (ordre chronologique).
  * @param {DayPhys[]} days triés par date
+ * @param {{ trackCycle?: boolean }} [opts]
  * @returns {DayRecord[]}
  */
-export function computeScores(days) {
+export function computeScores(days, opts = {}) {
   const C = CONFIG;
+  const cycles = opts.trackCycle ? cyclePhases(days) : new Map();
   /** @type {DayRecord[]} */
   const out = [];
 
@@ -241,12 +245,19 @@ export function computeScores(days) {
 
     // ---- Récupération
     const lnHrv = day.hrv ? Math.log(day.hrv) : null;
+    const cycle = cycles.get(day.date) ?? null;
+    const luteal = cycle?.phase === 'luteal';
     const zs = {
       hrv: n ? z(lnHrv, baseline.lnHrv) : null,
       rhr: n ? z(day.rhr, baseline.rhr) : null,
       sleep: z(sleepScore, baseline.sleepScore),
       resp: n ? z(day.resp, baseline.resp) : null,
     };
+    // Phase lutéale : FC repos un peu plus haute et VFC un peu plus basse sont normales.
+    if (luteal) {
+      if (zs.rhr !== null) zs.rhr += C.cycle.luteal.rhrZ;
+      if (zs.hrv !== null) zs.hrv += C.cycle.luteal.hrvZ;
+    }
     const missing = [];
     if (!n) missing.push('nuit');
     else {
@@ -272,7 +283,8 @@ export function computeScores(days) {
         S += w * clamp(/** @type {number} */ (v), -4, 4);
       }
       recovery = 100 / (1 + Math.exp(-C.recovery.slope * S));
-      if (tempDelta !== null && Math.abs(tempDelta) > C.recovery.tempDeviation) {
+      const tempLimit = C.recovery.tempDeviation + (luteal ? C.cycle.luteal.tempAllowance : 0);
+      if (tempDelta !== null && Math.abs(tempDelta) > tempLimit) {
         tempPenalty = C.recovery.tempPenalty;
         recovery -= tempPenalty;
       }
@@ -338,6 +350,7 @@ export function computeScores(days) {
       acwr,
       alert,
       tempDelta,
+      cycle,
     });
   }
   return out;

@@ -1,7 +1,7 @@
 // PULSE — service worker : rend l'app utilisable hors connexion.
 // Stratégie « réseau d'abord » : on sert toujours la dernière version en ligne,
 // et la copie en cache prend le relais sans réseau (ou si le réseau met plus de 3 s).
-const CACHE = 'pulse-shell-v2';
+const CACHE = 'pulse-shell-v3';
 const SHELL = [
   './',
   'css/app.css',
@@ -36,6 +36,7 @@ const SHELL = [
   'js/program/generator.js',
   'js/scoring/config.js',
   'js/scoring/correlations.js',
+  'js/scoring/cycle.js',
   'js/scoring/daily.js',
   'js/scoring/gamification.js',
   'js/scoring/nights.js',

@@ -890,7 +890,7 @@ const forms = {
     go('#/sport/programme');
   },
   'profile-info': async (_form, fd) => {
-    const before = JSON.stringify([S.profile.birthYear, S.profile.hrMax]);
+    const before = JSON.stringify([S.profile.birthYear, S.profile.hrMax, S.profile.trackCycle]);
     const by = numOrNull(fd, 'birthYear');
     await saveProfile({
       firstName: str(fd, 'firstName').slice(0, 30),
@@ -902,8 +902,8 @@ const forms = {
       wakeTime: str(fd, 'wakeTime') || '07:00',
       trackCycle: fd.has('trackCycle') ? str(fd, 'trackCycle') === '1' : S.profile.trackCycle,
     });
-    if (before !== JSON.stringify([S.profile.birthYear, S.profile.hrMax]) && S.data.hasSamples) {
-      toast('Recalcul des zones et de l\'effort…');
+    if (before !== JSON.stringify([S.profile.birthYear, S.profile.hrMax, S.profile.trackCycle]) && S.data.hasSamples) {
+      toast('Recalcul de tes scores…');
       await recompute();
       await loadAll();
     }

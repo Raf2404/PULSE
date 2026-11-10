@@ -210,3 +210,26 @@ describe('besoin et coucher', () => {
     assert.ok(t.baseNeedMin >= 390 && t.baseNeedMin <= 570);
   });
 });
+
+describe('cycle menstruel', () => {
+  test('jour et phase du cycle, compensation en phase lutéale', async () => {
+    const { cyclePhases } = await import('../site/js/scoring/cycle.js');
+    const { days } = buildDays({ byType: groupByType(demo.samples), workouts: demo.workouts, hrMax: 190, hrRest: null });
+    // Règles saisies 3 jours, 20 jours avant la fin
+    const startIdx = days.length - 20;
+    for (let k = 0; k < 3; k++) days[startIdx + k].menstrual = 'medium';
+    const phases = cyclePhases(days);
+    assert.equal(phases.get(days[startIdx].date)?.day, 1);
+    assert.equal(phases.get(days[startIdx].date)?.phase, 'menstrual');
+    assert.equal(phases.get(days[startIdx + 9].date)?.phase, 'follicular');
+    assert.equal(phases.get(days.at(-1)?.date ?? '')?.phase, 'luteal');
+    assert.equal(phases.get(days[startIdx - 1].date), undefined);
+    const off = computeScores(days);
+    const on = computeScores(days, { trackCycle: true });
+    const last = /** @type {import('../site/js/scoring/scores.js').DayRecord} */ (on.at(-1));
+    assert.equal(last.cycle?.phase, 'luteal');
+    assert.equal(off.at(-1)?.cycle, null);
+    // La compensation ne peut que remonter (ou laisser égale) la récupération lutéale.
+    assert.ok(/** @type {number} */ (last.recovery) >= /** @type {number} */ (off.at(-1)?.recovery));
+  });
+});

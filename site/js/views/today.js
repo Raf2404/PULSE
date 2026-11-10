@@ -11,6 +11,7 @@ import { mean, trend, round } from '../scoring/stats.js';
 import { CONFIG } from '../scoring/config.js';
 import { stressBaseline, stressOfDay, stressLevel } from '../scoring/stress.js';
 import { localDateKey } from '../data/schema.js';
+import { PHASE_LABELS } from '../scoring/cycle.js';
 
 /** @typedef {import('../scoring/scores.js').DayRecord} DayRecord */
 
@@ -223,10 +224,11 @@ export function renderToday() {
     ? `<p class="note center reveal">Calibration : encore ${Math.max(1, CONFIG.baseline.minNights - r.nightsInBaseline)} nuit(s) avant ton premier score de récupération.</p>`
     : r.calibration === 'calibrating' ? `<p class="note center reveal">${icon('hourglass', { size: 13 })} Calibration en cours : précision complète après ${CONFIG.baseline.fullNights} nuits.</p>` : '';
   const reduced = r.reducedPrecision ? `<p class="note center reveal">${icon('info', { size: 13 })} Précision réduite : ${esc(r.missing.join(', '))} indisponible(s) cette nuit.</p>` : '';
+  const cycle = r.cycle ? `<p class="note center reveal">${icon('flower-2', { size: 13 })} Jour ${r.cycle.day} du cycle · ${PHASE_LABELS[r.cycle.phase]}${r.cycle.phase === 'luteal' ? ' : PULSE compense la FC repos et la température, plus hautes en cette phase.' : ''}</p>` : '';
   return `${head}
     ${stale}
     <div data-detail-rings>${ringsFor(r)}</div>
-    ${calib}${reduced}
+    ${calib}${reduced}${cycle}
     ${alertCard(r)}
     ${briefCard()}
     ${effortCard(r)}

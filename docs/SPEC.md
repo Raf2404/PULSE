@@ -39,12 +39,24 @@ pulse/
 └─ docs/SPEC.md, CLAUDE.md
 ```
 
-### Roadmap révisée
+### Roadmap révisée (état au 10 nov. 2026)
 
-- **Phase 0 — Fondations** : arborescence ci-dessus, thème sombre (tokens section 6), coquille des 5 onglets, stockage IndexedDB, format commun validé, générateur de 90 jours de démo, PWA installable, déploiement Netlify.
-- **Phase 1 — Données + scores** : import `export.zip`, moteur de scores, écrans Aujourd'hui / Sommeil / Sport, onboarding.
-- **Phase 2 — Coach + Level up** : coach, programmes, XP / niveaux / badges, journal du soir + corrélations.
-- **Phase 3 — Synchro Raccourcis** + respiration guidée, rapport mensuel PDF.
+- **Phase 0 — Fondations** : fait.
+- **Phase 1 — Données + scores** : fait. Import `export.zip` (worker + dézippage en flux), moteur de scores complet, écrans Aujourd'hui / Sommeil / Sport, onboarding en 5 écrans.
+- **Phase 2 — Coach + Level up** : fait. Coach IA (clé perso), coach à règles sans clé, brief du matin et bilan hebdo, programmes + séance du jour adaptative + bibliothèque, XP / niveaux / rangs / séries / badges / défis / attributs / level up, journal du soir + corrélations, notifications push.
+- **Phase 3 — Synchro Raccourcis** : fait (import par lien `#import=` ou collé, à valider sur iPhone), moniteur de stress, respiration guidée, rapport mensuel PDF (impression).
+- **Phase 4 — Extensions** : nutrition simple (hydratation, protéines) et cycle menstruel faits. Hors périmètre « site statique gratuit » : widgets iOS (app native), mode amis / ligue (comptes et serveur), Android / Health Connect (app native).
+
+### Choix faits pendant le développement
+
+- **Notifications** : une PWA sur iPhone ne reçoit de rappel programmé que par Web Push, qui exige un serveur. Exception assumée à « aucun serveur » : deux **fonctions Netlify gratuites** (`netlify/functions`) stockent l'abonnement et les heures de rappel (Netlify Blobs) et envoient les push. Elles ne reçoivent **jamais** de données de santé. Clés VAPID générées au premier appel, gardées côté serveur.
+- **Coach IA** : Claude Sonnet 5.5 (`claude-sonnet-5-5`) pour le chat avec outils, Claude Haiku 5.5 (`claude-haiku-5-5`) pour le brief et le bilan. SDK officiel empaqueté dans `site/js/vendor/anthropic.js` (chargé à la demande). Repli côté serveur activé (`fallbacks: "default"`). Limite de 60 échanges IA par jour. Le prénom n'est jamais envoyé.
+- **Cache du « brief » et du « bilan »** : générés une fois par jour / par semaine à l'ouverture de l'app (pas de cron serveur).
+- **Corrélations** : affichées seulement si au moins 5 soirs avec le facteur et une taille d'effet (d de Cohen) ≥ 0,5 ; récupération et sommeil exprimés en points, VFC en %.
+- **FC repos** : nocturne (moyenne des 20 % de mesures les plus basses pendant le sommeil), repli sur la FC repos d'Apple sans nuit.
+- **Dette de sommeil** : manque par rapport au besoin de base (+ ajustement effort), ±1 h par nuit, une nuit longue rembourse.
+- **Effort cible** : fourchettes exactes du tableau 5.4, avec un point à viser interpolé.
+- **Cycle** : en phase lutéale, compensation de la FC repos (z −0,5), de la VFC (z +0,3) et +0,3 °C de tolérance sur la température.
 
 ### Précisions sur les formules
 

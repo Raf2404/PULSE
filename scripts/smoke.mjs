@@ -188,6 +188,73 @@ await coach.locator('.msg.coach').nth(1).locator('.chat-card svg').waitFor();
 await shot('coach');
 step('Coach : questions rapides en un tap (coach à règles) avec carte graphique');
 
+// ---------------------------------------------------------------- Coach IA (API Claude simulée)
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+/** @param {object[]} events */
+const sseBody = (events) => events.map((e) => `event: ${/** @type {{ type: string }} */ (e).type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+/** @param {object[]} blocks @param {string} stop */
+const streamEvents = (blocks, stop) => {
+  /** @type {object[]} */
+  const ev = [{ type: 'message_start', message: { id: 'msg_x', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } }];
+  blocks.forEach((b, index) => {
+    const bl = /** @type {Record<string, unknown>} */ (b);
+    if (bl.type === 'text') {
+      ev.push({ type: 'content_block_start', index, content_block: { type: 'text', text: '' } }, { type: 'content_block_delta', index, delta: { type: 'text_delta', text: bl.text } });
+    } else {
+      ev.push({ type: 'content_block_start', index, content_block: { type: 'tool_use', id: bl.id, name: bl.name, input: {} } }, { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(bl.input) } });
+    }
+    ev.push({ type: 'content_block_stop', index });
+  });
+  ev.push({ type: 'message_delta', delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 5 } }, { type: 'message_stop' });
+  return sseBody(ev);
+};
+/** @type {Record<string, unknown>[]} */
+const aiBodies = [];
+await page.route('https://api.anthropic.com/**', async (route) => {
+  const req = route.request();
+  if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+  if (req.method() === 'GET') return route.fulfill({ status: 200, headers: CORS, json: { id: 'claude-sonnet-5-5', type: 'model', display_name: 'Claude Sonnet 5.5', created_at: '2026-01-01T00:00:00Z' } });
+  const body = req.postDataJSON();
+  aiBodies.push(body);
+  if (!body.stream) {
+    return route.fulfill({ status: 200, headers: CORS, json: { id: 'msg_b', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: 'Brief IA : journée calme, ta batterie nerveuse remonte doucement. Couche-toi tôt ce soir.' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } } });
+  }
+  const toolDone = body.messages.some((/** @type {{ content: unknown }} */ m) => Array.isArray(m.content) && m.content.some((/** @type {{ type: string }} */ c) => c.type === 'tool_result'));
+  return route.fulfill({
+    status: 200,
+    headers: { ...CORS, 'content-type': 'text/event-stream' },
+    body: toolDone
+      ? streamEvents([{ type: 'text', text: 'Ta VFC remonte depuis 2 jours. **Action** : séance légère et coucher à 22 h 45.' }], 'end_turn')
+      : streamEvents([{ type: 'text', text: 'Je regarde tes 14 derniers jours.' }, { type: 'tool_use', id: 'toolu_1', name: 'show_chart', input: { metric: 'hrv', days: 14 } }, { type: 'tool_use', id: 'toolu_2', name: 'save_memory', input: { key: 'objectif', value: 'mieux dormir en semaine' } }], 'tool_use'),
+  });
+});
+await nav('#/profil/coach');
+await visible().locator('input[name="apiKey"]').fill('sk-ant-test-0000');
+await visible().getByRole('button', { name: /Vérifier et enregistrer/ }).click();
+await page.getByRole('status').filter({ hasText: 'Clé vérifiée' }).waitFor();
+await visible().locator('.toggle-row', { hasText: 'résumés chiffrés' }).click();
+await page.getByRole('status').filter({ hasText: 'Coach IA autorisé' }).waitFor();
+await nav('#/aujourdhui');
+await visible().getByText('Brief IA : journée calme').waitFor({ timeout: 15000 });
+await visible().getByText('Rédigé par ton coach IA').waitFor();
+step('clé API vérifiée, consentement IA, brief du matin rédigé par l\'IA (Haiku)');
+await page.getByRole('navigation').getByRole('link', { name: 'Coach' }).click();
+await visible().locator('textarea[name="text"]').fill('Comment va ma récupération ?');
+await visible().locator('textarea[name="text"]').press('Enter');
+const lastCoach = visible().locator('.msg.coach').last();
+await lastCoach.getByText('Ta VFC remonte depuis 2 jours.').waitFor({ timeout: 15000 });
+await lastCoach.getByRole('img', { name: /VFC/ }).waitFor();
+await lastCoach.getByText('mieux dormir en semaine').waitFor();
+assert.equal(await lastCoach.locator('strong', { hasText: 'Action' }).count(), 1);
+const chatReq = aiBodies.filter((b) => b.stream);
+assert.equal(chatReq[0].model, 'claude-sonnet-5-5');
+assert.equal(chatReq[0].fallbacks, 'default');
+assert.ok(!JSON.stringify(chatReq[0].system).includes('Alex'), 'prénom jamais envoyé à l\'IA');
+assert.ok(aiBodies.some((b) => !b.stream && b.model === 'claude-haiku-5-5'));
+await shot('coach-ia');
+step('coach IA : streaming, outil show_chart (carte graphique), save_memory, prénom jamais envoyé');
+await page.unroute('https://api.anthropic.com/**');
+
 // ---------------------------------------------------------------- Profil et sous-pages
 await page.getByRole('navigation').getByRole('link', { name: 'Profil' }).click();
 const profil = visible();

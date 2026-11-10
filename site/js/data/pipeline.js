@@ -39,7 +39,7 @@ export async function recompute(opts = {}) {
   const { days, hrRestUsed } = buildDays({ byType, workouts, hrMax: hrMaxOf(profile), hrRest: null });
   progress(0.85, 'Calcul des scores');
   await tick();
-  const records = computeScores(days);
+  const records = computeScores(days, { trackCycle: profile.trackCycle });
   await db.replaceAll('daily', records);
   await db.setMeta('computedAt', Date.now());
   await db.setMeta('hrRestUsed', hrRestUsed);

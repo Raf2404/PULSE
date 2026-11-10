@@ -4,9 +4,15 @@
   La section 0 (décisions du 10 nov. 2026) prime sur le reste du document.
 - On avance phase par phase (roadmap révisée de la section 0). Ne pas coder une phase future sans demande.
 - Site statique : HTML + CSS + JavaScript en modules ES, sans build, déployé sur Netlify.
-  Aucun serveur, aucun service payant. Les données restent dans le navigateur (IndexedDB).
-- JS typé en JSDoc (`// @ts-check`). Pas de dépendance npm à l'exécution : une lib indispensable
-  est copiée dans js/vendor/ avec sa licence.
+  Aucun service payant. Les données de santé restent dans le navigateur (IndexedDB).
+  Seule exception serveur : les fonctions Netlify de rappels push (netlify/functions), qui ne
+  reçoivent jamais de données de santé (abonnement + heures de rappel uniquement).
+- JS typé en JSDoc (`// @ts-check`). Pas de dépendance npm à l'exécution côté site : une lib
+  indispensable est copiée dans site/js/vendor/ avec sa licence (fflate, SDK Anthropic empaqueté).
+  Les fonctions Netlify ont leurs dépendances (web-push, @netlify/blobs) dans package.json.
+- Coach IA : claude-sonnet-5-5 (chat + outils), claude-haiku-5-5 (brief, bilan), via le SDK
+  empaqueté, clé de l'utilisateur stockée sur son appareil. Jamais de prénom ni d'identifiant
+  dans ce qui est envoyé à l'IA (voir coach/context.js).
 - Tout calcul de score vit dans js/scoring/, en fonctions pures testées (`node --test`).
 - Les poids et seuils des scores sont dans js/scoring/config.js, jamais en dur.
 - Aucune clé secrète dans le dépôt.
@@ -25,4 +31,7 @@
 - `npm run serve` : site en local sur http://localhost:8080.
 - `node scripts/build-icons.mjs` : après ajout d'une icône Lucide dans la liste du script.
 - `node scripts/make-icons.mjs` : régénère icônes PNG et écrans de lancement depuis site/icons/icon.svg.
-- Si un fichier est ajouté au site, l'ajouter aussi à la liste SHELL de site/sw.js (mode hors ligne).
+- `node scripts/update-sw.mjs` : après l'ajout d'un fichier au site (liste hors ligne du service worker ;
+  un test échoue si on l'oublie).
+- `node scripts/vendor-anthropic.mjs` : ré-empaquette le SDK Anthropic après une mise à jour.
+- `node scripts/make-test-export.mjs <fichier.zip>` : faux export Apple Santé (tests d'import).

@@ -115,6 +115,14 @@ export const CONFIG = Object.freeze({
     breathingMinSec: 120,
   },
 
+  cycle: {
+    /** Jours sans flux qui séparent deux cycles. */
+    newCycleGapDays: 10,
+    maxCycleDays: 45,
+    /** Compensation en phase lutéale (écarts physiologiques attendus). */
+    luteal: { rhrZ: -0.5, hrvZ: 0.3, tempAllowance: 0.3 },
+  },
+
   stress: {
     /** Heures sédentaires : peu de pas, hors séance. */
     sedentaryStepsPerHour: 500,
