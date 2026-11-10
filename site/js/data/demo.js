@@ -360,8 +360,8 @@ export function generateDemo(opts = {}) {
       }
       q('wrist_temp', round(35.9 + tempDelta, 2), '°C', sleepStart, wake);
     }
-    // FC repos : calculée par la montre sur la journée, même sans la nuit
-    q('rhr', Math.round(rhr), 'bpm', at(i, 12), at(i, 12));
+    // FC repos : estimée par la montre dès le réveil, même sans les données de la nuit
+    q('rhr', Math.round(rhr), 'bpm', wake + 30 * MIN, wake + 30 * MIN);
 
     // ---------- Journée du jour i ----------
     const restOnly = sick || prodrome || recoveryDays.has(i);
