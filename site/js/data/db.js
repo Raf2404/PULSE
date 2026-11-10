@@ -6,8 +6,14 @@
  * - samples  : mesures brutes, clé = sampleKey (dédoublonnage), index [type, start] et start
  * - workouts : séances, clé = workoutKey, index start
  * - journal  : journal du soir, clé = date
- * - daily    : résumés quotidiens (scores, Phase 1), clé = date
+ * - daily    : résumés quotidiens (scores), clé = date
  * - meta     : réglages et profil, clé = key
+ * - insights : textes générés (brief, bilan hebdo), clé = id
+ * - programs : programmes d'entraînement, clé = id
+ * - sessions : séances planifiées, clé = id, index date et programId
+ * - messages : historique du chat avec le coach, clé = id, index createdAt
+ * - memory   : ce que le coach retient, clé = key
+ * - breathing: séances de respiration guidée, clé = id, index start
  */
 import { sampleKey, workoutKey } from './schema.js';
 
@@ -16,8 +22,13 @@ import { sampleKey, workoutKey } from './schema.js';
 /** @typedef {import('./schema.js').JournalEntry} JournalEntry */
 
 export const DB_NAME = 'pulse';
-export const DB_VERSION = 1;
-export const STORES = /** @type {const} */ (['samples', 'workouts', 'journal', 'daily', 'meta']);
+export const DB_VERSION = 2;
+export const STORES = /** @type {const} */ ([
+  'samples', 'workouts', 'journal', 'daily', 'meta',
+  'insights', 'programs', 'sessions', 'messages', 'memory', 'breathing',
+]);
+/** Magasins conservés quand on remplace les données de santé (démo ↔ import). */
+const KEEP_ON_CLEAR = new Set(['meta', 'memory']);
 
 /** @typedef {typeof STORES[number]} StoreName */
 
@@ -55,16 +66,29 @@ export function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
-      const samples = db.createObjectStore('samples', { keyPath: 'id' });
-      samples.createIndex('type_start', ['type', 'start']);
-      samples.createIndex('start', 'start');
-      const workouts = db.createObjectStore('workouts', { keyPath: 'id' });
-      workouts.createIndex('start', 'start');
-      db.createObjectStore('journal', { keyPath: 'date' });
-      db.createObjectStore('daily', { keyPath: 'date' });
-      db.createObjectStore('meta', { keyPath: 'key' });
+      const old = event.oldVersion;
+      if (old < 1) {
+        const samples = db.createObjectStore('samples', { keyPath: 'id' });
+        samples.createIndex('type_start', ['type', 'start']);
+        samples.createIndex('start', 'start');
+        const workouts = db.createObjectStore('workouts', { keyPath: 'id' });
+        workouts.createIndex('start', 'start');
+        db.createObjectStore('journal', { keyPath: 'date' });
+        db.createObjectStore('daily', { keyPath: 'date' });
+        db.createObjectStore('meta', { keyPath: 'key' });
+      }
+      if (old < 2) {
+        db.createObjectStore('insights', { keyPath: 'id' });
+        db.createObjectStore('programs', { keyPath: 'id' });
+        const sessions = db.createObjectStore('sessions', { keyPath: 'id' });
+        sessions.createIndex('date', 'date');
+        sessions.createIndex('programId', 'programId');
+        db.createObjectStore('messages', { keyPath: 'id' }).createIndex('createdAt', 'createdAt');
+        db.createObjectStore('memory', { keyPath: 'key' });
+        db.createObjectStore('breathing', { keyPath: 'id' }).createIndex('start', 'start');
+      }
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -179,7 +203,7 @@ export async function counts() {
   const db = await openDb();
   const tx = db.transaction(STORES, 'readonly');
   /** @type {Record<StoreName, number>} */
-  const out = { samples: 0, workouts: 0, journal: 0, daily: 0, meta: 0 };
+  const out = /** @type {Record<StoreName, number>} */ (Object.fromEntries(STORES.map((s) => [s, 0])));
   await Promise.all(STORES.map(async (s) => { out[s] = await request(tx.objectStore(s).count()); }));
   return out;
 }
@@ -205,10 +229,10 @@ export async function setMeta(key, value) {
   await done(tx);
 }
 
-/** Vide toutes les données de santé (garde les réglages si keepMeta). */
+/** Vide toutes les données de santé (garde réglages et mémoire du coach si keepMeta). */
 export async function clearHealthData({ keepMeta = true } = {}) {
   const db = await openDb();
-  const stores = keepMeta ? STORES.filter((s) => s !== 'meta') : [...STORES];
+  const stores = keepMeta ? STORES.filter((s) => !KEEP_ON_CLEAR.has(s)) : [...STORES];
   const tx = db.transaction(stores, 'readwrite');
   for (const s of stores) tx.objectStore(s).clear();
   await done(tx);
@@ -234,6 +258,76 @@ export async function requestPersistence() {
     if (navigator.storage?.persist) return await navigator.storage.persist();
   } catch { /* navigateur sans support */ }
   return false;
+}
+
+/**
+ * Toutes les mesures d'un type (triées par début).
+ * @param {Sample['type']} type
+ * @returns {Promise<Sample[]>}
+ */
+export function getAllSamplesOfType(type) {
+  return getSamples(type, -Infinity, Infinity);
+}
+
+/** @returns {Promise<Workout[]>} */
+export function getAllWorkouts() {
+  return getWorkouts(-Infinity, Infinity);
+}
+
+/**
+ * Tous les éléments d'un magasin.
+ * @param {StoreName} store
+ * @returns {Promise<unknown[]>}
+ */
+export async function getAll(store) {
+  const db = await openDb();
+  return request(db.transaction(store, 'readonly').objectStore(store).getAll());
+}
+
+/**
+ * Un élément par sa clé.
+ * @param {StoreName} store @param {IDBValidKey} key
+ * @returns {Promise<unknown>}
+ */
+export async function get(store, key) {
+  const db = await openDb();
+  return request(db.transaction(store, 'readonly').objectStore(store).get(key));
+}
+
+/**
+ * Écrit un ou plusieurs éléments.
+ * @param {StoreName} store @param {object | object[]} rows
+ */
+export async function put(store, rows) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const os = tx.objectStore(store);
+  for (const row of Array.isArray(rows) ? rows : [rows]) os.put(row);
+  await done(tx);
+}
+
+/**
+ * Supprime un élément.
+ * @param {StoreName} store @param {IDBValidKey} key
+ */
+export async function remove(store, key) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  tx.objectStore(store).delete(key);
+  await done(tx);
+}
+
+/**
+ * Remplace tout le contenu d'un magasin.
+ * @param {StoreName} store @param {object[]} rows
+ */
+export async function replaceAll(store, rows) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const os = tx.objectStore(store);
+  os.clear();
+  for (const row of rows) os.put(row);
+  await done(tx);
 }
 
 /**

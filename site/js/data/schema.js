@@ -20,10 +20,15 @@ export const QUANTITY_TYPES = /** @type {const} */ ({
   weight: { unit: 'kg', min: 20, max: 400 },
   body_fat: { unit: '%', min: 2, max: 80 },
   mindful: { unit: 'min', min: 0, max: 1440 },
+  water: { unit: 'mL', min: 0, max: 20000 },
+  protein: { unit: 'g', min: 0, max: 1000 },
 });
 
 /** Phases de sommeil (mesure de catégorie : `value` est une de ces chaînes). */
 export const SLEEP_STAGES = /** @type {const} */ (['in_bed', 'awake', 'core', 'deep', 'rem', 'asleep']);
+
+/** Flux menstruel (mesure de catégorie, si l'utilisatrice le saisit dans Santé). */
+export const MENSTRUAL_FLOWS = /** @type {const} */ (['none', 'light', 'medium', 'heavy', 'unspecified']);
 
 /** Types de séances reconnus. */
 export const WORKOUT_TYPES = /** @type {const} */ ([
@@ -55,7 +60,17 @@ export const WORKOUT_TYPES = /** @type {const} */ ([
  * @property {string} source
  */
 
-/** @typedef {QuantitySample | SleepSample} Sample */
+/**
+ * @typedef {object} MenstrualSample
+ * @property {'menstrual'} type
+ * @property {typeof MENSTRUAL_FLOWS[number]} value
+ * @property {''} unit
+ * @property {number} start
+ * @property {number} end
+ * @property {string} source
+ */
+
+/** @typedef {QuantitySample | SleepSample | MenstrualSample} Sample */
 
 /**
  * @typedef {object} Workout
@@ -120,11 +135,12 @@ export function validateSample(s) {
   const errors = [];
   if (!isObject(s)) return { ok: false, errors: ['la mesure doit être un objet'] };
 
-  if (s.type === 'sleep') {
-    if (!SLEEP_STAGES.includes(/** @type {SleepStage} */ (s.value))) {
-      errors.push(`phase de sommeil inconnue : ${String(s.value)}`);
+  if (s.type === 'sleep' || s.type === 'menstrual') {
+    const allowed = /** @type {readonly string[]} */ (s.type === 'sleep' ? SLEEP_STAGES : MENSTRUAL_FLOWS);
+    if (typeof s.value !== 'string' || !allowed.includes(s.value)) {
+      errors.push(`${s.type} : valeur inconnue ${String(s.value)}`);
     }
-    if (s.unit !== '') errors.push('une phase de sommeil n\'a pas d\'unité');
+    if (s.unit !== '') errors.push(`${s.type} : mesure de catégorie sans unité`);
   } else if (typeof s.type === 'string' && Object.hasOwn(QUANTITY_TYPES, s.type)) {
     const spec = QUANTITY_TYPES[/** @type {QuantityType} */ (s.type)];
     if (!isFiniteNumber(s.value)) {
@@ -196,8 +212,8 @@ export function validateJournalEntry(j) {
  * @param {Sample} s
  */
 export function sampleKey(s) {
-  return s.type === 'sleep'
-    ? `sleep:${s.value}|${s.start}|${s.end}|${s.source}`
+  return s.type === 'sleep' || s.type === 'menstrual'
+    ? `${s.type}:${s.value}|${s.start}|${s.end}|${s.source}`
     : `${s.type}|${s.start}|${s.end}|${s.source}`;
 }
 

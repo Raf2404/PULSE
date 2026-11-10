@@ -60,3 +60,27 @@ test('stocke les 90 jours de démo et retrouve la période couverte', async () =
   assert.equal(range.first, demo.samples[0].start);
   assert.equal(range.last, demo.samples.at(-1)?.start);
 });
+
+test('le pipeline calcule et met en cache les résumés quotidiens', async () => {
+  const { recompute, loadRecords } = await import('../site/js/data/pipeline.js');
+  const demo = generateDemo({ end: new Date(2026, 10, 10, 9, 30) });
+  await db.putSamples(demo.samples);
+  await db.putWorkouts(demo.workouts);
+  /** @type {number[]} */
+  const steps = [];
+  const records = await recompute({ onProgress: (r) => steps.push(r) });
+  assert.equal(steps.at(-1), 1);
+  const cached = await loadRecords();
+  assert.equal(cached.length, records.length);
+  assert.equal(cached.at(-1)?.date, '2026-11-10');
+  assert.equal(cached.at(-1)?.recovery, records.at(-1)?.recovery);
+  assert.ok(typeof (await db.getMeta('computedAt')) === 'number');
+});
+
+test('migration : les nouveaux magasins existent et « tout effacer » garde la mémoire du coach', async () => {
+  await db.put('memory', { key: 'blessure', value: 'genou gauche fragile', editable: true });
+  await db.put('insights', { id: 'brief:2026-11-10', type: 'brief', date: '2026-11-10', text: '…' });
+  await db.clearHealthData();
+  assert.equal((await db.getAll('insights')).length, 0);
+  assert.equal((await db.getAll('memory')).length, 1);
+});
