@@ -11,6 +11,11 @@ const NAMES = [
   'sun', 'moon', 'dumbbell', 'sparkles', 'user-round', 'upload', 'trash-2', 'database', 'info',
   'flask-conical', 'smartphone', 'chevron-right', 'activity', 'heart-pulse', 'wind', 'thermometer',
   'footprints', 'shield-check', 'hourglass', 'bed', 'share', 'x', 'circle-alert', 'battery-medium', 'flame',
+  'bike', 'mountain', 'waves', 'leaf', 'trophy', 'chevron-left', 'check', 'plus', 'pencil', 'download', 'bell', 'key',
+  'settings', 'calendar', 'clock', 'book-open', 'list-checks', 'send', 'square', 'share-2', 'file-text', 'droplet',
+  'beef', 'flower-2', 'gauge', 'trending-up', 'trending-down', 'minus', 'arrow-right', 'refresh-cw', 'lock', 'award',
+  'target', 'zap', 'shield-alert', 'droplets', 'heart', 'timer', 'play', 'pause', 'rotate-ccw', 'smile', 'printer',
+  'brain', 'wine', 'coffee', 'monitor-smartphone', 'utensils', 'circle-check', 'circle',
 ];
 
 const entries = NAMES.map((name) => {
