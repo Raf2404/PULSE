@@ -1,0 +1,65 @@
+/* Jetons de design PULSE (cahier des charges, section 6). Thème sombre par défaut. */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('../fonts/inter.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('../fonts/space-grotesk.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Couleurs (6.1) */
+  --bg: #0a0b0d;
+  --surface: #15171b;
+  --surface-2: #1e2126;
+  --text: #f5f7fa;
+  --text-muted: #8a9099;
+  --recovery-green: #16ec8e;
+  --recovery-yellow: #ffd43b;
+  --recovery-red: #ff4d5e;
+  --sleep: #7b8cff;
+  --strain: #3fa9f5;
+  --xp-from: #b57bff;
+  --xp-to: #ff7bd5;
+  --xp: linear-gradient(90deg, var(--xp-from), var(--xp-to));
+
+  /* Dérivés utilitaires */
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --ring-track: rgba(255, 255, 255, 0.08);
+  --tabbar-bg: rgba(10, 11, 13, 0.82);
+
+  /* Typographie (6.2) */
+  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-score: 'Space Grotesk', ui-rounded, 'SF Pro Rounded', var(--font-text);
+  --fs-score: clamp(56px, 16vw, 72px);
+  --fs-ring: 26px;
+  --fs-title: 20px;
+  --fs-text: 15px;
+  --fs-caption: 12px;
+
+  /* Formes */
+  --radius-card: 20px;
+  --radius-pill: 999px;
+  --gutter: 16px;
+  --tabbar-h: 64px;
+
+  /* Animations (6.3) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1); /* ressort doux */
+  --dur-tab: 250ms;
+  --dur-card: 300ms;
+  --stagger: 40ms;
+  --dur-ring: 1.2s;
+}
