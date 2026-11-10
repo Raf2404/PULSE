@@ -117,7 +117,7 @@ export const CONFIG = Object.freeze({
 
   stress: {
     /** Heures sédentaires : peu de pas, hors séance. */
-    sedentaryStepsPerHour: 300,
+    sedentaryStepsPerHour: 500,
     /** Seuils du niveau de stress (0–3). */
     levels: [0.8, 1.6, 2.4],
   },

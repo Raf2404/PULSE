@@ -282,6 +282,7 @@ export function generateDemo(opts = {}) {
   let prevDayTrimp = 0;
   let prevAlcohol = 0;
   let prevEveningLate = 0; // heures de coucher décalées la veille
+  let prevStress = 2; // stress ressenti la veille (1–5)
 
   for (let i = 0; i < days; i++) {
     const dayStart = at(i, 0);
@@ -318,6 +319,7 @@ export function generateDemo(opts = {}) {
       - 0.095 * Math.min(prevAlcohol, 4)
       - 0.0007 * Math.max(0, prevDayTrimp - 60)
       - 0.03 * sleepDeficitH
+      - 0.035 * Math.max(0, prevStress - 3)
       - 0.45 * sickLevel;
     const hrvNight = Math.exp(lnHrv);
     const rhr = P.hrRest - 1.2 * progress + rng.normal(0, 1.1)
@@ -405,12 +407,15 @@ export function generateDemo(opts = {}) {
     if (!fridayOrSaturday && !sick && rng.chance(0.12)) lateTonight += rng.uniform(0.8, 1.5); // nuit courte en semaine
     const nextBed = at(i, 23 + lateTonight); // borne de fin approximative de la journée active
 
+    // Stress ressenti de la journée (noté le soir dans le journal) : fait monter la FC l'après-midi.
+    const dayStress = clamp(Math.round(rng.normal(sick ? 3 : 2.3, 0.9)), 1, 5);
     // FC de journée toutes les 5 min, hors séance (marche le matin et en fin de journée)
     for (let t = wake + 5 * MIN; t < nextBed - 15 * MIN; t += 5 * MIN) {
       if (workoutWindow && t >= workoutWindow[0] - 5 * MIN && t < workoutWindow[1] + 10 * MIN) continue;
       const h = new Date(t).getHours() + new Date(t).getMinutes() / 60;
       const walking = (h > 8.2 && h < 8.7) || (h > 17.6 && h < 18.1) || rng.chance(0.06);
-      const base = P.hrRest + 14 + 6 * sickLevel + (walking ? rng.uniform(20, 35) : 0);
+      const stressBump = h >= 13 && h < 19 ? 2.5 * (dayStress - 2) : 0;
+      const base = P.hrRest + 14 + 6 * sickLevel + stressBump + (walking ? rng.uniform(20, 35) : 0);
       q('hr', Math.round(clamp(rng.normal(base, 3), 40, 170)), 'bpm', t);
     }
     // VFC de journée (plus basse et bruitée : à ignorer par les scores, qui ne gardent que la nuit)
@@ -440,7 +445,7 @@ export function generateDemo(opts = {}) {
         alcohol,
         screens: rng.chance(lateTonight > 0.5 ? 0.8 : 0.4),
         lateMeal: rng.chance(alcohol > 0 ? 0.5 : 0.15),
-        stress: clamp(Math.round(rng.normal(sick ? 3 : 2.3, 0.9)), 1, 5),
+        stress: dayStress,
         notes: '',
       });
     }
@@ -452,6 +457,7 @@ export function generateDemo(opts = {}) {
     prevDayTrimp = dayTrimp;
     prevAlcohol = alcohol;
     prevEveningLate = lateTonight;
+    prevStress = dayStress;
   }
 
   samples.sort((a, b) => a.start - b.start);
