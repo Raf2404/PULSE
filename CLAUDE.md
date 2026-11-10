@@ -15,3 +15,14 @@
 - Interface et textes en français, ton simple, sans jargon par défaut.
 - Jamais de vocabulaire de diagnostic médical dans l'app ni dans les réponses du coach.
 - Toujours vérifier en mode démo avant de dire qu'une fonctionnalité est finie.
+- Politique de sécurité stricte (netlify.toml) : pas de script ni de style en ligne, pas d'attribut
+  `style="…"` dans le HTML généré ; passer par des classes ou `el.style.setProperty()`.
+
+## Commandes
+
+- `npm run check` : contrôle des types + tests unitaires (à lancer avant chaque commit).
+- `node scripts/smoke.mjs --shots` : test de bout en bout au format iPhone, captures dans screenshots/.
+- `npm run serve` : site en local sur http://localhost:8080.
+- `node scripts/build-icons.mjs` : après ajout d'une icône Lucide dans la liste du script.
+- `node scripts/make-icons.mjs` : régénère icônes PNG et écrans de lancement depuis site/icons/icon.svg.
+- Si un fichier est ajouté au site, l'ajouter aussi à la liste SHELL de site/sw.js (mode hors ligne).
