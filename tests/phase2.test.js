@@ -133,7 +133,10 @@ describe('corrélations du journal', () => {
     assert.ok(alc, c.map((x) => x.text).join(' | '));
     assert.ok(alc.diffPct < -8, alc.text);
     assert.ok(alc.nWith >= 3);
-    assert.match(alc.text, /^Les soirs avec alcool, .* (baisse|monte) de \d+ % en moyenne \(\d+ soirs\)\.$/);
+    assert.match(alc.text, /^Les soirs avec alcool, .* (baisse|monte) de \d+ (%|points) en moyenne \(\d+ soirs\)\.$/);
+    assert.ok(Math.abs(alc.effect) >= 0.5);
+    // Pas de corrélation positive fantaisiste : la démo ne simule aucun effet de la caféine
+    assert.ok(!c.some((x) => x.factor === 'lateCaffeine' && x.diffPct > 0), c.map((x) => x.text).join(' | '));
     assert.ok(c.every((x) => !MEDICAL.test(x.text)));
   });
 });

@@ -19,5 +19,9 @@
     "fflate": "^0.8.3",
     "lucide-static": "^0.577.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^11.1.9",
+    "web-push": "^4.0.0"
   }
 }

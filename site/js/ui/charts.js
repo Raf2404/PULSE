@@ -42,19 +42,22 @@ export function lineChart(o) {
   const hi = o.max ?? hi0;
   const x = (/** @type {number} */ i) => 4 + (i / Math.max(1, pts.length - 1)) * (W - 8);
   const y = (/** @type {number} */ v) => bottom - ((v - lo) / (hi - lo || 1)) * (bottom - top);
-  /** @type {string[]} */
+  // Segments continus (un trou dans les données coupe la courbe et son aire).
+  /** @type {{ d: string, first: number, last: number }[]} */
   const segs = [];
-  let cur = '';
+  /** @type {{ d: string, first: number, last: number } | null} */
+  let cur = null;
   pts.forEach((p, i) => {
-    if (p.value === null) { if (cur) segs.push(cur); cur = ''; return; }
-    cur += `${cur ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`;
+    if (p.value === null) { if (cur) segs.push(cur); cur = null; return; }
+    const pt = `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`;
+    if (cur) { cur.d += `L${pt}`; cur.last = i; } else cur = { d: `M${pt}`, first: i, last: i };
   });
   if (cur) segs.push(cur);
-  const firstIdx = pts.findIndex((p) => p.value !== null);
   let lastIdx = -1;
   pts.forEach((p, i) => { if (p.value !== null) lastIdx = i; });
-  const line = segs.join(' ');
-  const area = `${line} L${x(lastIdx).toFixed(1)},${bottom} L${x(firstIdx).toFixed(1)},${bottom} Z`;
+  const line = segs.map((sg) => sg.d).join(' ');
+  const area = segs.filter((sg) => sg.last > sg.first)
+    .map((sg) => `${sg.d} L${x(sg.last).toFixed(1)},${bottom} L${x(sg.first).toFixed(1)},${bottom} Z`).join(' ');
   const gid = `g${++gradientSeq}`;
   const last = /** @type {number} */ (pts[lastIdx].value);
   const fmt = o.format ?? ((v) => String(Math.round(v)));

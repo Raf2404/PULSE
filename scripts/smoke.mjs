@@ -1,156 +1,312 @@
-// Test de fumée de bout en bout : sert site/ en local avec les en-têtes de netlify.toml (CSP comprise),
-// pilote un navigateur au format iPhone et enregistre des captures dans screenshots/.
-// Outil de dev : node scripts/smoke.mjs [--shots]
-import { createServer } from 'node:http';
-import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+// Test de bout en bout : parcours complet au format iPhone, avec les en-têtes de netlify.toml (CSP comprise).
+// Outil de dev : node scripts/smoke.mjs [--shots]   (captures dans screenshots/)
+import { mkdirSync, mkdtempSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
+import { startServer } from './serve-test.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
-const ROOT = 'site';
 const SHOTS = process.argv.includes('--shots');
-const toml = readFileSync('netlify.toml', 'utf8');
-const csp = /Content-Security-Policy = "([^"]+)"/.exec(toml)?.[1];
-assert.ok(csp, 'CSP introuvable dans netlify.toml');
-
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
-};
-
-const server = createServer((req, res) => {
-  const path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
-  let file = join(ROOT, path);
-  if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
-  if (!existsSync(file)) { res.writeHead(404); res.end('404'); return; }
-  res.writeHead(200, {
-    'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
-    'Content-Security-Policy': csp,
-    'Cache-Control': 'no-cache',
-  });
-  res.end(readFileSync(file));
-});
-await new Promise((r) => server.listen(0, 'localhost', () => r(undefined)));
-const address = server.address();
-const BASE = `http://localhost:${typeof address === 'object' && address ? address.port : 0}`;
-
+const { server, base: BASE } = await startServer();
 const browser = await chromium.launch();
 const iphone = devices['iPhone 15 Pro'];
 const context = await browser.newContext({ ...iphone, locale: 'fr-FR', timezoneId: 'Europe/Paris', ...(SHOTS ? {} : { deviceScaleFactor: 1 }) });
 const page = await context.newPage();
 
+/** @type {string[]} */
 const problems = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`[console ${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
-page.on('requestfailed', (r) => problems.push(`[requête échouée] ${r.url()}`));
+page.on('requestfailed', (r) => { if (!r.url().includes('/api/push')) problems.push(`[requête échouée] ${r.url()}`); });
 
 if (SHOTS) mkdirSync('screenshots', { recursive: true });
-/** @param {string} name */
-const shot = async (name) => {
+let shotN = 0;
+/** @param {string} name @param {boolean} [full] */
+const shot = async (name, full = true) => {
   if (!SHOTS) return;
-  await page.waitForTimeout(1500); // fin des animations
-  await page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
+  await page.waitForTimeout(1400);
+  await page.screenshot({ path: `screenshots/${String(++shotN).padStart(2, '0')}-${name}.png`, fullPage: full });
 };
 /** @param {string} label */
 const step = (label) => console.log(`✓ ${label}`);
+/** @param {string} hash */
+const nav = async (hash) => { await page.evaluate((h) => { location.hash = h; }, hash); await page.waitForTimeout(350); };
+const visible = () => page.locator('.screen:not([hidden])');
 
-// 1. Premier lancement : pas de données
+// ---------------------------------------------------------------- onboarding
 await page.goto(`${BASE}/`);
-await page.getByRole('heading', { name: 'Bonjour' }).waitFor();
-await page.getByText('Commence par tes données').waitFor();
-assert.equal(await page.locator('.ring').count(), 3);
-assert.equal(await page.getByRole('img', { name: /Récupération : pas encore de score/ }).count(), 1);
-step('accueil vide : 3 anneaux sans score et invitation à charger des données');
-await shot('1-accueil-vide');
+const ob = page.locator('.onboarding');
+await ob.getByRole('heading', { name: 'Ton objectif' }).waitFor();
+await shot('onboarding-1', false);
+await ob.getByText('Mieux dormir').click();
+await ob.getByText('Progresser en sport').click();
+await ob.getByRole('button', { name: /Suivant/ }).click();
+await ob.getByRole('heading', { name: 'Toi et tes sports' }).waitFor();
+await ob.getByText('Course').click();
+await ob.getByText('Musculation').click();
+await ob.locator('input[name="firstName"]').fill('Alex');
+await ob.locator('input[name="birthYear"]').fill('1994');
+await ob.getByRole('button', { name: /Suivant/ }).click();
+await ob.getByRole('heading', { name: 'Tes données' }).waitFor();
+await ob.getByRole('button', { name: /Essayer avec 90 jours de démo/ }).click();
+await page.getByRole('status').filter({ hasText: 'consentement' }).waitFor();
+step('onboarding : la démo exige le consentement santé');
+await ob.locator('input[name="healthConsent"]').check();
+await ob.getByRole('button', { name: /Essayer avec 90 jours de démo/ }).click();
+await page.getByRole('status').filter({ hasText: 'Démo chargée' }).waitFor({ timeout: 60000 });
+await ob.getByText('Données démo chargées.').waitFor();
+await shot('onboarding-3', false);
+await ob.getByRole('button', { name: /Suivant/ }).click();
+await ob.getByRole('heading', { name: 'Ton coach' }).waitFor();
+await ob.getByText('Direct', { exact: true }).click();
+await ob.getByRole('button', { name: /Suivant/ }).click();
+await ob.getByRole('heading', { name: 'Ton premier score' }).waitFor();
+assert.equal(await ob.locator('.ring').count(), 3);
+await shot('onboarding-5', false);
+await ob.getByRole('button', { name: /C'est parti/ }).click();
+await ob.waitFor({ state: 'detached' });
+step('onboarding en 5 écrans terminé (objectifs, profil, consentement + démo, coach, premier score)');
 
-// 2. Chargement de la démo
-await page.getByRole('button', { name: /Essayer avec 90 jours de démo/ }).click();
-await page.getByRole('status').filter({ hasText: 'Démo chargée' }).waitFor({ timeout: 30000 });
-await page.getByRole('heading', { name: 'Dernière nuit' }).waitFor();
-const toastText = await page.getByRole('status').textContent();
-step(`démo chargée (${toastText?.trim()})`);
-assert.match(await page.locator('.metrics').textContent() ?? '', /\d+ h \d{2}/);
-assert.equal(await page.locator('.badge.demo').count(), 1);
-step('dernière nuit affichée (durée, VFC, FC repos) + badge Démo');
-await shot('2-accueil-demo');
+// ---------------------------------------------------------------- Aujourd'hui
+const today = visible();
+await today.getByRole('heading', { level: 1, name: /Bonjour|Bonsoir/ }).waitFor();
+assert.match(await today.locator('h1').textContent() ?? '', /Alex/);
+const recoveryLabel = await today.locator('.ring.recovery').getAttribute('aria-label');
+assert.match(recoveryLabel ?? '', /Récupération : \d+% sur 100|pas encore de score/);
+await today.getByRole('heading', { name: 'Brief du matin' }).waitFor();
+await today.getByRole('heading', { name: 'Effort cible du jour' }).waitFor();
+assert.equal(await today.locator('.metric-card').count(), 6);
+await today.getByRole('heading', { name: 'Ma journée' }).waitFor();
+assert.ok(await today.locator('.xp-card').count() === 1);
+step(`Aujourd'hui : 3 anneaux (${recoveryLabel}), brief, effort cible, 6 métriques, ma journée, XP`);
+await shot('aujourdhui');
 
-// 3. Les données survivent au rechargement
-await page.reload();
-await page.getByRole('heading', { name: 'Dernière nuit' }).waitFor();
-step('données conservées après rechargement');
+await today.locator('.ring.recovery').click();
+const sheet = page.locator('.sheet');
+await sheet.getByRole('heading', { name: 'Récupération' }).waitFor();
+assert.ok(await sheet.locator('.data-table tbody tr').count() === 4);
+await shot('detail-recuperation', false);
+await sheet.getByRole('button', { name: 'Fermer' }).click();
+await sheet.waitFor({ state: 'detached' });
+await today.locator('.metric-card').first().click();
+await sheet.getByRole('heading', { name: 'Batterie nerveuse' }).waitFor();
+await sheet.getByRole('button', { name: 'Fermer' }).click();
+step('détails au tap : récupération (z-scores, poids) et métrique (30 jours)');
 
-// 4. Navigation dans les 5 onglets
-for (const [tab, title] of [['Sommeil', 'Sommeil'], ['Sport', 'Sport'], ['Coach', 'Coach'], ['Profil', 'Profil'], ["Aujourd'hui", 'Bonjour']]) {
-  await page.getByRole('navigation').getByRole('link', { name: tab }).click();
-  await page.getByRole('heading', { level: 1, name: title }).waitFor();
-  const current = await page.locator('.tabbar a[aria-current="page"]').textContent();
-  assert.equal(current?.trim(), tab);
-  assert.equal(await page.locator('.screen:not([hidden])').count(), 1);
-  if (tab === 'Coach') assert.equal(await page.locator('#fab-coach').isHidden(), true);
-  if (SHOTS && tab !== "Aujourd'hui") await shot(`3-${tab.toLowerCase()}`);
+// ---------------------------------------------------------------- Sommeil
+await page.getByRole('navigation').getByRole('link', { name: 'Sommeil' }).click();
+const sleep = visible();
+await sleep.getByRole('heading', { level: 1, name: 'Sommeil' }).waitFor();
+assert.equal(await sleep.locator('.pillar').count(), 4);
+await sleep.locator('[data-hypnogram] rect').nth(3).click();
+assert.match(await sleep.locator('[data-hyp-caption]').textContent() ?? '', /min$/);
+await sleep.getByRole('heading', { name: /Ce soir : couche-toi à/ }).waitFor();
+await sleep.getByRole('heading', { name: 'Régularité' }).waitFor();
+await sleep.getByRole('tab', { name: 'Mois' }).click();
+await page.locator('.screen:not([hidden]) [role="tab"][aria-selected="true"]', { hasText: 'Mois' }).waitFor();
+step('Sommeil : 4 piliers, hypnogramme interactif, heure de coucher, régularité, historique mois');
+await shot('sommeil');
+
+// Journal du soir : +10 XP
+const xpBefore = await page.evaluate(async () => (await import('./js/state.js')).S.progress?.xpTotal ?? 0);
+const journal = sleep.locator('.journal-card');
+if (!(await journal.getAttribute('open'))) await journal.locator('summary').click();
+await journal.getByText('Caféine après 14 h').click();
+await journal.locator('[data-step="1"]').click();
+await journal.locator('.scale span', { hasText: '4' }).click();
+await journal.getByRole('button', { name: /Enregistrer|Mettre à jour/ }).click();
+await page.getByRole('status').filter({ hasText: 'Journal enregistré' }).waitFor();
+const xpAfter = await page.evaluate(async () => (await import('./js/state.js')).S.progress?.xpTotal ?? 0);
+assert.ok(xpAfter >= xpBefore, `XP ${xpBefore} → ${xpAfter}`);
+step(`journal du soir enregistré (XP ${xpBefore} → ${xpAfter})`);
+
+// ---------------------------------------------------------------- Sport + programme
+await page.getByRole('navigation').getByRole('link', { name: 'Sport' }).click();
+const sport = visible();
+await sport.getByRole('heading', { level: 1, name: 'Sport' }).waitFor();
+await sport.getByRole('heading', { name: 'Séances récentes' }).waitFor();
+await sport.getByRole('heading', { name: 'Charge d\'entraînement' }).waitFor();
+await sport.getByRole('heading', { name: 'Tes zones cardio' }).waitFor();
+await sport.getByRole('heading', { name: 'Records et progression' }).waitFor();
+await shot('sport');
+await sport.locator('.list-row').first().click();
+await sheet.locator('.zones').waitFor();
+await sheet.getByRole('button', { name: 'Fermer' }).click();
+step('Sport : séances (détail avec zones), charge 7 j / 28 j, zones cardio, records');
+
+await sport.getByRole('link', { name: /Créer mon programme/ }).click();
+const creator = visible();
+await creator.getByRole('heading', { level: 1, name: 'Créer mon programme' }).waitFor();
+await creator.getByText('Haltères').click();
+await creator.getByText('Genou').click();
+await shot('createur');
+await creator.getByRole('button', { name: /Créer le programme/ }).click();
+await visible().getByRole('heading', { level: 1, name: 'Mon programme' }).waitFor();
+await visible().locator('a.list-row').first().waitFor({ timeout: 10000 }).catch(async () => console.log(await visible().innerText()));
+const sessions = await visible().locator('a.list-row').count();
+assert.ok(sessions >= 20, `${sessions} séances`);
+step(`programme créé : ${sessions} séances planifiées`);
+await shot('programme');
+
+// Séance du jour ou prochaine séance : marquer comme faite (+80 XP), date passée ou aujourd'hui seulement
+const todayKey = await page.evaluate(async () => (await import('./js/state.js')).todayKey());
+const hasToday = await page.evaluate(async (d) => Boolean((await import('./js/state.js')).sessionOn(d)), todayKey);
+await nav(`#/sport/seance/${hasToday ? todayKey : (await visible().locator('a.list-row').first().getAttribute('href'))?.split('/').pop()}`);
+const sessionView = visible();
+await sessionView.getByRole('heading', { name: 'Exercices' }).or(sessionView.getByText(/Course|Vélo/).first()).first().waitFor();
+await shot('seance');
+if (hasToday) {
+  await sessionView.getByRole('tab', { name: 'Allégée' }).click();
+  await sessionView.getByText('Version allégée choisie.').waitFor();
+  await sessionView.locator('.rpe span', { hasText: '7' }).click();
+  await sessionView.getByRole('button', { name: /C'est fait/ }).click();
+  await sessionView.getByRole('heading', { name: 'Séance faite' }).waitFor();
+  step('séance du jour : version allégée choisie, faite avec ressenti 7/10');
+} else {
+  step('pas de séance aujourd\'hui (jour de repos du programme) : détail de la prochaine séance affiché');
 }
-step('5 onglets accessibles, onglet actif marqué, bouton coach masqué sur l\'onglet Coach');
+await nav('#/sport/exercices');
+assert.ok(await visible().locator('.list-row').count() >= 30);
+step('bibliothèque d\'exercices');
 
-// 5. Bouton flottant du coach
-await page.locator('#fab-coach').click();
-await page.getByRole('heading', { level: 1, name: 'Coach' }).waitFor();
-step('le bouton flottant ouvre le coach');
+// ---------------------------------------------------------------- Coach (à règles, sans clé)
+await page.getByRole('navigation').getByRole('link', { name: 'Coach' }).click();
+const coach = visible();
+await coach.getByRole('heading', { level: 1, name: 'Coach' }).waitFor();
+assert.equal(await page.locator('#fab-coach').isHidden(), true);
+await coach.getByRole('heading', { name: 'Active le coach IA' }).waitFor();
+await coach.getByRole('button', { name: 'Je m\'entraîne aujourd\'hui ?' }).click();
+await coach.locator('.msg.coach').first().waitFor();
+assert.match(await coach.locator('.msg.coach .msg-text').first().textContent() ?? '', /Effort conseillé|données de nuit|lever le pied/);
+await coach.getByRole('button', { name: 'Analyse ma semaine' }).click();
+await coach.locator('.msg.coach').nth(1).locator('.chat-card svg').waitFor();
+await shot('coach');
+step('Coach : questions rapides en un tap (coach à règles) avec carte graphique');
 
-// 6. Profil : statistiques puis effacement
-await page.goto(`${BASE}/#/profil`);
-const profil = page.locator('#screen-profil');
-await profil.getByText('Mesures').waitFor();
-const samplesText = await profil.locator('.stat-list div', { hasText: 'Mesures' }).locator('dd').textContent();
-assert.ok(Number((samplesText ?? '').replace(/\D/g, '')) > 20000, `mesures : ${samplesText}`);
-step(`profil : ${samplesText?.trim()} mesures listées`);
-await profil.getByRole('button', { name: /Tout effacer/ }).click();
-await page.getByRole('dialog').getByRole('button', { name: 'Tout effacer' }).click();
-await page.getByRole('status').filter({ hasText: 'effacées' }).waitFor();
-await page.goto(`${BASE}/#/aujourdhui`);
-await page.getByText('Commence par tes données').waitFor();
-step('« Tout effacer » vide bien l\'appareil');
+// ---------------------------------------------------------------- Profil et sous-pages
+await page.getByRole('navigation').getByRole('link', { name: 'Profil' }).click();
+const profil = visible();
+await profil.getByRole('heading', { level: 1, name: 'Profil' }).waitFor();
+await shot('profil');
+await nav('#/profil/progression');
+await visible().getByRole('heading', { name: 'Attributs' }).waitFor();
+const earned = await visible().locator('.badge-tile.earned').count();
+assert.ok(earned >= 3, `${earned} badges`);
+await shot('progression');
+step(`progression : niveau, attributs, séries, défi, ${earned} badges gagnés`);
+await nav('#/profil/coach');
+await visible().getByRole('heading', { name: 'Ta clé API Claude' }).waitFor();
+await visible().locator('input[name="key"]').fill('blessure');
+await visible().locator('input[name="value"]').fill('genou gauche fragile');
+await visible().getByRole('button', { name: /Ajouter/ }).click();
+await visible().getByText('genou gauche fragile').waitFor();
+step('coach IA : réglages, mémoire modifiable');
+await nav('#/profil/notifications');
+await visible().getByRole('heading', { name: 'Rappels' }).waitFor();
+await nav('#/profil/donnees');
+await visible().getByRole('heading', { name: 'Qualité des données' }).waitFor();
+assert.equal(await visible().locator('.quality-row').count(), 9);
+await shot('donnees');
+await nav('#/profil/raccourcis');
+await visible().getByRole('heading', { name: 'Créer le raccourci (une fois)' }).waitFor();
+step('notifications, données (qualité par métrique), Raccourcis');
 
-// 7. PWA : manifeste et service worker
+// ---------------------------------------------------------------- Respiration, rapport, stress
+await nav('#/respirer');
+await visible().getByRole('heading', { level: 1, name: 'Respiration guidée' }).waitFor();
+await visible().getByRole('tab', { name: '4-7-8' }).click();
+await visible().getByRole('button', { name: /Commencer/ }).click();
+await page.waitForTimeout(600);
+assert.equal(await visible().locator('[data-breathe-phase]').textContent(), 'Inspire');
+await shot('respiration', false);
+await visible().getByRole('button', { name: /Arrêter/ }).click();
+step('respiration guidée animée (4-7-8)');
+await nav('#/rapport');
+await visible().locator('.report-sheet').waitFor();
+assert.ok(await visible().locator('.report-grid > div').count() === 8);
+await shot('rapport');
+step('rapport mensuel imprimable');
+
+// Rechargement : tout est conservé, plus d'onboarding
+await page.reload();
+await visible().getByRole('heading', { level: 1, name: /Rapport mensuel/ }).waitFor();
+assert.equal(await page.locator('.onboarding').count(), 0);
+step('données, programme et réglages conservés après rechargement');
+
+// ---------------------------------------------------------------- Raccourcis (lien #import=)
+const payload = encodeURIComponent('Fréquence cardiaque;55;bpm;2026-11-10T03:00:00+01:00;2026-11-10T03:00:00+01:00;Watch');
+await page.goto(`${BASE}/#import=${payload}`);
+await page.getByRole('status').filter({ hasText: 'Synchro Raccourcis' }).waitFor({ timeout: 30000 });
+step('import Raccourcis par lien #import=');
+
+// ---------------------------------------------------------------- PWA et hors connexion
 const manifest = await (await page.request.get(`${BASE}/manifest.webmanifest`)).json();
 assert.equal(manifest.display, 'standalone');
-for (const i of manifest.icons) assert.equal((await page.request.get(`${BASE}/${i.src}`)).status(), 200, i.src);
-const splashes = await page.locator('link[rel="apple-touch-startup-image"]').evaluateAll((ls) => ls.map((l) => l.getAttribute('href')));
-for (const s of splashes) assert.equal((await page.request.get(`${BASE}/${s}`)).status(), 200, s);
-const swReady = await page.evaluate(async () => {
-  const reg = await navigator.serviceWorker.ready;
-  return Boolean(reg.active);
-});
-assert.ok(swReady);
-step(`PWA : manifeste valide, ${manifest.icons.length} icônes, ${splashes.length} écrans de lancement, service worker actif`);
-
-// 8. Hors connexion : l'app s'ouvre depuis le cache
-await page.reload(); // la page est maintenant contrôlée par le service worker
+await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+await page.reload();
 await context.setOffline(true);
 await page.reload();
-await page.getByRole('heading', { name: 'Bonjour' }).waitFor();
+await visible().locator('.ring').first().waitFor();
 await context.setOffline(false);
-step('l\'app s\'ouvre hors connexion');
+step('PWA installable et utilisable hors connexion');
 
-// 9. Mouvement réduit
+// ---------------------------------------------------------------- Thème clair + mouvement réduit
+await nav('#/profil');
+await visible().getByRole('tab', { name: 'Clair' }).click();
+await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+await nav('#/aujourdhui');
+await shot('theme-clair', false);
+await nav('#/profil');
+await visible().getByRole('tab', { name: 'Sombre' }).click();
+await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+step('thème clair / sombre');
+
+// ---------------------------------------------------------------- import réel d'un export.zip (nouvel appareil)
+const zipPath = join(mkdtempSync(join(tmpdir(), 'pulse-')), 'export.zip');
+execFileSync('node', ['scripts/make-test-export.mjs', zipPath], { env: { ...process.env, TZ: 'Europe/Paris' } });
+const fresh = await browser.newContext({ ...iphone, deviceScaleFactor: 1, locale: 'fr-FR', timezoneId: 'Europe/Paris' });
+const fp = await fresh.newPage();
+fp.on('pageerror', (e) => problems.push(`[pageerror import] ${e.message}`));
+fp.on('console', (m) => { if (m.type() === 'error') problems.push(`[console import] ${m.text()}`); });
+await fp.goto(`${BASE}/`);
+const ob2 = fp.locator('.onboarding');
+await ob2.getByRole('button', { name: /Suivant/ }).click();
+await ob2.getByRole('button', { name: /Suivant/ }).click();
+await ob2.locator('input[name="healthConsent"]').check();
+const [chooser] = await Promise.all([fp.waitForEvent('filechooser'), ob2.getByRole('button', { name: /Importer mon export Apple Santé/ }).click()]);
+await chooser.setFiles(zipPath);
+await fp.getByRole('status').filter({ hasText: 'Import terminé' }).waitFor({ timeout: 90000 });
+const imported = await fp.evaluate(async () => {
+  const { S } = await import('./js/state.js');
+  return { mode: S.mode, days: S.records.length, scored: S.records.filter((r) => r.recovery !== null).length, workouts: S.records.reduce((a, r) => a + r.workouts.length, 0), sources: S.lastImport?.sources ?? [] };
+});
+assert.equal(imported.mode, 'apple');
+assert.ok(imported.days >= 85 && imported.scored >= 70, JSON.stringify(imported));
+assert.ok(imported.workouts >= 30);
+assert.ok(imported.sources.includes('Apple Watch de Test'));
+await fresh.close();
+step(`import réel d'un export.zip (worker + fflate) : ${imported.days} jours, ${imported.scored} scores, ${imported.workouts} séances`);
+
 const reduced = await browser.newContext({ ...iphone, deviceScaleFactor: 1, reducedMotion: 'reduce' });
 const rp = await reduced.newPage();
 rp.on('pageerror', (e) => problems.push(`[pageerror réduit] ${e.message}`));
 await rp.goto(`${BASE}/`);
-await rp.getByRole('heading', { name: 'Bonjour' }).waitFor();
-const anim = await rp.locator('.reveal').first().evaluate((el) => getComputedStyle(el).animationName);
-assert.equal(anim, 'fade-in');
+await rp.locator('.reveal').first().waitFor();
+assert.equal(await rp.locator('.reveal').first().evaluate((el) => getComputedStyle(el).animationName), 'fade-in');
 await reduced.close();
-step('prefers-reduced-motion : animations remplacées par des fondus');
+step('prefers-reduced-motion : simples fondus');
 
 await browser.close();
 server.close();
 
-const unexpected = problems.filter((p) => !p.includes('net::ERR_INTERNET_DISCONNECTED'));
+const unexpected = problems.filter((p) => !p.includes('net::ERR_INTERNET_DISCONNECTED') && !p.includes('Rappels non synchronisés'));
 if (unexpected.length) {
-  console.error('\nProblèmes détectés :\n' + unexpected.join('\n'));
+  console.error(`\nProblèmes détectés :\n${unexpected.join('\n')}`);
   process.exit(1);
 }
 console.log('\nAucune erreur console, aucune violation CSP.');

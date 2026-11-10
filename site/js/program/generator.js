@@ -90,6 +90,7 @@ import { localDateKey } from '../data/schema.js';
  * @property {number | null} doneAt
  * @property {'normal' | 'light' | 'rest'} version
  * @property {string | null} adjustNote
+ * @property {boolean} [locked]     version choisie par l'utilisateur ou le coach (plus d'adaptation auto)
  */
 
 export const GOAL_LABELS = /** @type {const} */ ({
@@ -321,6 +322,7 @@ export function createProgram(q, opts = {}) {
 
 /**
  * Version allégée d'une séance (récupération rouge) : −40 % de volume, cardio ramené en zone 2.
+ * La séance enregistrée garde toujours son contenu d'origine ; seule la vue est allégée.
  * @param {PlannedSession} s
  * @returns {PlannedSession}
  */
@@ -330,19 +332,29 @@ export function lightVersion(s) {
     version: 'light',
     exercises: s.exercises.map((e) => ({ ...e, sets: Math.max(1, Math.round(e.sets * 0.6)) })),
     cardio: s.cardio ? { ...s.cardio, durationMin: Math.round(s.cardio.durationMin * 0.6), zone: 2, intervals: null, description: 'Version allégée : allure facile, sans fractionné.' } : null,
-    adjustNote: 'Récupération basse : séance allégée proposée automatiquement.',
   };
 }
 
 /**
- * Ajuste la séance du jour selon la récupération (programme adaptatif).
+ * Applique une version à une séance d'origine.
+ * @param {PlannedSession} s @param {'normal' | 'light' | 'rest'} version
+ * @returns {PlannedSession}
+ */
+export function withVersion(s, version) {
+  if (version === 'light') return lightVersion(s);
+  return { ...s, version };
+}
+
+/**
+ * Séance du jour telle qu'affichée : version choisie (verrouillée) ou adaptée à la récupération.
  * @param {PlannedSession} s @param {'green' | 'yellow' | 'red' | null} zone
+ * @returns {PlannedSession}
  */
 export function adaptSession(s, zone) {
-  if (s.done || s.version !== 'normal') return s;
-  if (zone === 'red') return lightVersion(s);
-  if (zone === 'yellow') return { ...s, adjustNote: 'Récupération moyenne : fais la séance prévue sans chercher de record.' };
-  if (zone === 'green') return { ...s, adjustNote: 'Bonne récupération : c\'est le jour pour pousser un peu.' };
+  if (s.done || s.locked) return withVersion(s, s.version);
+  if (zone === 'red') return { ...lightVersion(s), adjustNote: 'Récupération basse : séance allégée proposée automatiquement.' };
+  if (zone === 'yellow') return { ...s, version: /** @type {const} */ ('normal'), adjustNote: 'Récupération moyenne : fais la séance prévue sans chercher de record.' };
+  if (zone === 'green') return { ...s, version: /** @type {const} */ ('normal'), adjustNote: 'Bonne récupération : c\'est le jour pour pousser un peu.' };
   return s;
 }
 

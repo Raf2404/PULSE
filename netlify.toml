@@ -3,6 +3,12 @@
   publish = "site"
   command = ""
 
+# Fonctions gratuites : rappels push (abonnement + envoi planifié). Elles ne reçoivent
+# jamais de données de santé, seulement des heures de rappel.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [[headers]]
   for = "/*"
   [headers.values]

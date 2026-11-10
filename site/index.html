@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>PULSE</title>
   <meta name="description" content="Ta montre mesure, PULSE t'explique quoi faire aujourd'hui.">
   <meta name="theme-color" content="#0a0b0d">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
   <meta name="referrer" content="no-referrer">
 
   <!-- Installation sur l'écran d'accueil (PWA) -->
@@ -61,6 +61,8 @@
   </main>
 
   <a class="fab" href="#/coach" id="fab-coach" aria-label="Parler au coach"></a>
+  <div id="overlay"></div>
+  <input type="file" id="file-input" accept=".zip,.xml,application/zip,text/xml" hidden>
 
   <nav class="tabbar" aria-label="Navigation principale">
     <ul>

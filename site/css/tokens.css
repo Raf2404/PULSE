@@ -63,3 +63,46 @@
   --stagger: 40ms;
   --dur-ring: 1.2s;
 }
+
+/* Thème clair (le sombre reste le défaut) : choisi dans le profil, ou « auto » selon le téléphone. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --text: #0d0f12;
+  --text-muted: #5d6470;
+  --recovery-green: #0aa865;
+  --recovery-yellow: #c99400;
+  --recovery-red: #e0283b;
+  --sleep: #4f5fe6;
+  --strain: #1b84d6;
+  --xp-from: #8f4dff;
+  --xp-to: #e04fb3;
+  --line: rgba(13, 15, 18, 0.08);
+  --line-strong: rgba(13, 15, 18, 0.16);
+  --ring-track: rgba(13, 15, 18, 0.08);
+  --tabbar-bg: rgba(245, 246, 248, 0.85);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --text: #0d0f12;
+    --text-muted: #5d6470;
+    --recovery-green: #0aa865;
+    --recovery-yellow: #c99400;
+    --recovery-red: #e0283b;
+    --sleep: #4f5fe6;
+    --strain: #1b84d6;
+    --xp-from: #8f4dff;
+    --xp-to: #e04fb3;
+    --line: rgba(13, 15, 18, 0.08);
+    --line-strong: rgba(13, 15, 18, 0.16);
+    --ring-track: rgba(13, 15, 18, 0.08);
+    --tabbar-bg: rgba(245, 246, 248, 0.85);
+  }
+}
