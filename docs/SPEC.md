@@ -13,6 +13,7 @@
   - **Voie A — import de `export.zip`** depuis l'app Santé, traité entièrement dans le navigateur (dézippage + XML en streaming dans un Web Worker, seuls les ~120 derniers jours sont gardés).
   - **Voie Raccourcis (à prototyper)** : un Raccourci iOS gratuit lit les données de la veille dans Santé et ouvre PULSE avec ces données dans le fragment d'URL (`#import=…`, jamais envoyé au serveur). Peut être déclenché par une automatisation (ex. à l'arrêt du réveil).
   - Les voies B (app tierce payante) et C (app compagnon) sont abandonnées pour l'instant.
+- **Clé de dédoublonnage des mesures** : type + début + **fin** + source (la section 7 ne prévoyait pas la fin ; deux mesures distinctes peuvent démarrer au même instant).
 - **Moteur de scores** (section 5) inchangé, en fonctions JS pures testées avec `node --test`.
 - **XP calculée localement** (usage perso, pas d'enjeu de triche).
 - **Coach IA = clé API Claude personnelle** : l'utilisateur colle sa propre clé dans les réglages ; elle est stockée uniquement sur son appareil et les appels partent directement du navigateur vers `api.anthropic.com` (usage perso, coût à l'usage). Jamais de clé dans le dépôt. Sans clé, l'app reste utilisable (scores et conseils à règles).
@@ -21,17 +22,20 @@
 
 ```
 pulse/
-├─ index.html                 app (5 onglets)
-├─ manifest.webmanifest, sw.js, icons/
-├─ css/tokens.css, css/app.css
-├─ js/
-│  ├─ app.js                  navigation et rendu
-│  ├─ scoring/                fonctions pures + config.js (poids et seuils)
-│  ├─ data/                   db.js (IndexedDB), schema.js (format commun), demo.js (générateur 90 j)
-│  ├─ import/                 worker d'import export.zip
-│  └─ vendor/                 petites libs copiées en fichier (ex. fflate pour le zip)
+├─ site/                      seul dossier publié par Netlify
+│  ├─ index.html              app (5 onglets)
+│  ├─ manifest.webmanifest, sw.js, icons/, fonts/
+│  ├─ css/tokens.css, css/app.css
+│  └─ js/
+│     ├─ app.js               navigation et rendu
+│     ├─ ui/                  icônes, anneaux, composants d'écran
+│     ├─ scoring/             fonctions pures + config.js (poids et seuils)
+│     ├─ data/                db.js (IndexedDB), schema.js (format commun), demo.js (générateur 90 j)
+│     ├─ import/              worker d'import export.zip
+│     └─ vendor/              petites libs copiées en fichier (ex. fflate pour le zip)
 ├─ tests/                     *.test.js (node --test)
-├─ netlify.toml               en-têtes de sécurité, pas de build
+├─ scripts/                   outils de dev (icônes, captures, test de fumée)
+├─ netlify.toml               publie site/, en-têtes de sécurité, pas de build
 └─ docs/SPEC.md, CLAUDE.md
 ```
 
