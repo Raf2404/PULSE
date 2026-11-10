@@ -28,6 +28,7 @@ import { weekOf, rankOf } from './scoring/gamification.js';
 import { tonightNeed } from './scoring/scores.js';
 import { parseShortcutPayload, payloadFromHash } from './import/shortcut.js';
 import { enablePush, disablePush, syncReminders, testPush } from './notify.js';
+import { enableAutoSync, disableAutoSync, pullAutoSync, testAutoSync, syncUrl } from './import/autosync.js';
 import { minutesOf } from './data/profile.js';
 import { esc } from './ui/format.js';
 
@@ -347,6 +348,25 @@ async function handleUrlImport() {
   await importShortcut(payload);
   return true;
 }
+
+let lastPull = 0;
+/** Relève la synchro automatique (au démarrage et quand l'app revient au premier plan). */
+async function autoSyncPull() {
+  if (!S.syncSecret || S.busy || Date.now() - lastPull < 30000) return;
+  lastPull = Date.now();
+  try {
+    const r = await pullAutoSync();
+    if (!r) return;
+    await reloadAfterData();
+    toast(r.samples ? `Synchro : ${new Intl.NumberFormat('fr-FR').format(r.samples)} nouvelles mesures` : 'Synchro reçue, mais aucune mesure reconnue : vérifie le format du raccourci.');
+  } catch (err) {
+    console.warn('Synchro automatique impossible', err);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void autoSyncPull();
+});
 
 // ---------------------------------------------------------------- progression (XP, level up)
 
@@ -768,6 +788,27 @@ const actions = {
     S.memory = S.memory.filter((m) => m.key !== key);
     render();
   },
+  'autosync-enable': async () => {
+    try {
+      S.syncSecret = await enableAutoSync();
+      toast('Synchro activée : copie l\'adresse dans ton raccourci.');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Échec'); }
+    render();
+  },
+  'autosync-disable': async () => {
+    if (!(await confirmDialog('Désactiver la synchro ?', 'La boîte de synchro et ce qu\'elle contient seront effacées de ton site. Ton raccourci ne fonctionnera plus.', 'Désactiver'))) return;
+    await disableAutoSync();
+    S.syncSecret = null;
+    toast('Synchro automatique désactivée.');
+    render();
+  },
+  'autosync-copy': async () => {
+    if (!S.syncSecret) return;
+    try { await navigator.clipboard.writeText(syncUrl(S.syncSecret)); toast('Adresse copiée.'); } catch { toast('Copie impossible : sélectionne l\'adresse à la main.'); }
+  },
+  'autosync-test': async () => {
+    try { await testAutoSync(); toast('Circuit OK : ton site reçoit et rend bien les données.'); } catch (err) { toast(err instanceof Error ? err.message : 'Échec'); }
+  },
   'export-json': () => exportJson(),
   'export-csv': () => exportCsv(),
   print: () => window.print(),
@@ -1104,6 +1145,7 @@ async function boot() {
   }
   applyTheme();
   if (!(await handleUrlImport())) route();
+  await autoSyncPull();
   void aiBackgroundTasks();
   void syncReminders();
 }

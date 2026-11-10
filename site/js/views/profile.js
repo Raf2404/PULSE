@@ -190,7 +190,7 @@ export function renderData() {
         <p class="note">Le fichier est lu sur ton téléphone puis oublié : seules les mesures des 120 derniers jours sont gardées.</p>
       </details>
     </div>
-    <a class="card link-card reveal" href="#/profil/raccourcis">${cardHead('zap', 'Synchro rapide avec Raccourcis', { tone: 'xp', sub: 'Envoyer la nuit dernière en un tap, sans export', right: icon('chevron-right', { size: 20 }) })}</a>
+    <a class="card link-card reveal" href="#/profil/raccourcis">${cardHead('zap', 'Synchro automatique', { tone: 'xp', sub: S.syncSecret ? (S.lastSync ? `Activée · dernière synchro ${shortDate(localDateKey(S.lastSync.at))}` : 'Activée · en attente du raccourci') : 'Ta nuit dans PULSE chaque matin, sans export', right: icon('chevron-right', { size: 20 }) })}</a>
     <div class="card reveal">
       ${cardHead('gauge', 'Qualité des données', { sub: 'Part des 30 derniers jours avec la mesure' })}
       ${S.records.length ? quality : '<p class="note">Pas encore de données.</p>'}
@@ -210,28 +210,51 @@ export function renderData() {
 }
 
 export function renderShortcuts() {
-  const head = header('profil', 'Raccourcis', { back: '#/profil/donnees' });
-  const url = `${location.origin}${location.pathname}#import=`;
+  const head = header('profil', 'Synchro automatique', { back: '#/profil/donnees' });
+  const on = Boolean(S.syncSecret);
+  const url = on ? `${location.origin}/api/sync/${S.syncSecret}` : '';
+  const last = S.lastSync;
+  /** @param {string} t */
+  const code = (t) => `<code>${esc(t)}</code>`;
   return `${head}
     <div class="card reveal">
-      ${cardHead('zap', 'Synchro en un tap', { tone: 'xp', sub: 'Avec l\'app Raccourcis d\'Apple (gratuite)' })}
-      <p>Un raccourci lit les mesures récentes dans Santé et ouvre PULSE avec ces données dans le lien. Elles ne passent par aucun serveur : la partie après « # » n'est jamais envoyée sur internet.</p>
+      ${cardHead('zap', on ? 'Synchro activée' : 'Ta nuit dans PULSE, sans rien faire', { tone: 'xp', sub: on ? (last ? `Dernière synchro : ${esc(longDate(localDateKey(last.at)).toLowerCase())} à ${new Date(last.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · ${num(last.samples)} mesures` : 'En attente du premier envoi du raccourci') : 'Avec l\'app Raccourcis d\'Apple (gratuite)' })}
+      <p>Chaque matin, un raccourci envoie les mesures récentes de Santé à <strong>ton</strong> site. À l'ouverture, PULSE les récupère puis les fait supprimer du serveur (sinon, elles s'effacent seules après 48 h).</p>
+      ${on ? `
+        <span class="field-label">Ton adresse de synchro (à coller dans le raccourci, garde-la pour toi)</span>
+        <code class="sync-url">${esc(url)}</code>
+        <div class="actions row">
+          <button class="btn primary" data-action="autosync-copy">${icon('file-text', { size: 16 })}Copier l'adresse</button>
+          <button class="btn" data-action="autosync-test">${icon('refresh-cw', { size: 16 })}Tester</button>
+        </div>
+        <button class="btn danger" data-action="autosync-disable">${icon('trash-2', { size: 16 })}Désactiver et effacer la boîte</button>`
+    : `<button class="btn primary" data-action="autosync-enable">${icon('zap', { size: 18 })}Activer la synchro automatique</button>`}
+      <p class="note">Tes mesures transitent quelques instants par ton compte Netlify, protégées par un code secret que seul ce téléphone connaît.</p>
     </div>
     <div class="card reveal">
-      ${cardHead('list-checks', 'Créer le raccourci (une fois)')}
+      ${cardHead('list-checks', 'Créer le raccourci (une fois, ~10 min)')}
       <ol class="steps">
-        <li>Dans <strong>Raccourcis</strong>, crée un raccourci « PULSE ».</li>
-        <li>Pour chaque type (Fréquence cardiaque, Variabilité de la FC, FC au repos, Fréquence respiratoire, Analyse du sommeil, Pas) : ajoute <strong>Rechercher des échantillons de santé</strong> (date de début : ces 2 derniers jours) puis <strong>Ajouter à la variable</strong> « Mesures ».</li>
-        <li>Ajoute <strong>Répéter avec chaque élément</strong> de « Mesures », et dedans un bloc <strong>Texte</strong> : <code>Type;Valeur;Unité;Date de début;Date de fin;Source</code> (choisis chaque champ dans « Détails de l'échantillon », dates au format ISO 8601).</li>
-        <li>Après la boucle : <strong>Combiner le texte</strong> (nouvelles lignes), <strong>Encoder en URL</strong>, puis <strong>Ouvrir l'URL</strong> : <code>${esc(url)}</code> suivi du texte encodé.</li>
-        <li>Facultatif : dans <strong>Automatisation</strong>, lance-le « Quand l'alarme est arrêtée » pour une synchro chaque matin.</li>
+        <li>Ouvre <strong>Raccourcis</strong>, touche <strong>+</strong>, nomme-le ${code('PULSE Synchro')}.</li>
+        <li>Ajoute <strong>Rechercher des échantillons de santé</strong> : type <strong>Fréquence cardiaque</strong>, filtre <strong>Date de début</strong> « est dans les 2 derniers jours ». Puis <strong>Ajouter à la variable</strong> ${code('Mesures')}.</li>
+        <li>Recommence ces 2 actions pour : <strong>Variabilité de la fréquence cardiaque</strong>, <strong>Fréquence cardiaque au repos</strong>, <strong>Fréquence respiratoire</strong>, <strong>Analyse du sommeil</strong>, <strong>Saturation en oxygène</strong>, <strong>Température du poignet</strong> (si ta montre la mesure), <strong>Nombre de pas</strong>.</li>
+        <li>Ajoute <strong>Répéter avec chaque élément</strong> de ${code('Mesures')}. Dedans, un bloc <strong>Texte</strong> avec, séparés par ${code(';')} : Élément répété › <strong>Type</strong> ; <strong>Valeur</strong> ; <strong>Unité</strong> ; <strong>Date de début</strong> ; <strong>Date de fin</strong> ; <strong>Source</strong>. Pour les deux dates, touche la variable et choisis le format <strong>ISO 8601</strong>.</li>
+        <li>Après <strong>Fin de la répétition</strong> : <strong>Combiner le texte</strong> (Résultats de Répéter, séparateur <strong>Nouvelle ligne</strong>).</li>
+        <li>Ajoute <strong>Obtenir le contenu de l'URL</strong> : colle ton adresse de synchro, touche la flèche, <strong>Méthode : POST</strong>, <strong>Corps de la requête : Fichier</strong>, et choisis le <strong>Texte combiné</strong>.</li>
+        <li>Lance-le une fois à la main : iOS te demande l'accès à Santé, accepte. Ouvre ensuite PULSE : « Synchro » doit s'afficher.</li>
       </ol>
-      <p class="note">PULSE reconnaît les noms français et anglais des types et des phases de sommeil. Fonction expérimentale : si un lien ne passe pas, l'import du fichier export.zip reste la référence.</p>
     </div>
     <div class="card reveal">
-      ${cardHead('file-text', 'Coller des données')}
-      <p class="note">Si ton raccourci copie le texte au lieu d'ouvrir le lien, colle-le ici.</p>
+      ${cardHead('clock', 'L\'automatiser (chaque matin)')}
+      <ol class="steps">
+        <li>Raccourcis › <strong>Automatisation</strong> › <strong>+</strong> › <strong>Réveil</strong> › <strong>Est arrêté</strong> (ou « Heure de la journée » si tu n'as pas de réveil).</li>
+        <li>Choisis <strong>Exécuter immédiatement</strong> (pas de confirmation) et désactive <strong>Notifier lors de l'exécution</strong> si tu veux.</li>
+        <li>Action : <strong>Exécuter le raccourci</strong> › ${code('PULSE Synchro')}.</li>
+      </ol>
+      <p class="note">iOS ne laisse lire Santé que téléphone déverrouillé : l'arrêt du réveil est le meilleur moment. Les séances ne passent pas par Raccourcis : refais un export complet de temps en temps (une fois par mois suffit) pour ton historique sport.</p>
+    </div>
+    <details class="card reveal howto">
+      <summary>${icon('file-text', { size: 16 })} Coller des données à la main</summary>
       <form data-form="paste-shortcut"><textarea name="payload" rows="4" placeholder="Fréquence cardiaque;56;bpm;2026-11-10T03:12:00+01:00;…"></textarea>
       <button class="btn" type="submit">${icon('upload', { size: 16 })}Importer ce texte</button></form>
-    </div>`;
+    </details>`;
 }

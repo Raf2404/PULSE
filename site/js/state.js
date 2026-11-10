@@ -74,6 +74,8 @@ export const S = {
   /** @type {number | null} */ lastSeenLevel: null,
   /** @type {string[]} */ seenBadges: [],
   /** @type {{ hasSamples: boolean, first: number | null, last: number | null }} */ data: { hasSamples: false, first: null, last: null },
+  /** @type {string | null} */ syncSecret: null,
+  /** @type {{ at: number, samples: number, deposits: number, rejected: number } | null} */ lastSync: null,
   busy: false,
 };
 
@@ -147,8 +149,10 @@ export async function loadAll() {
     db.getAll('insights'),
     db.getSampleRange(),
   ]);
-  const meta = await Promise.all(['profile', 'mode', 'apiKey', 'onboarded', 'lastImport', 'aiUsage', 'notif', 'lastSeenLevel', 'seenBadges'].map((k) => db.getMeta(k)));
-  const [profile, mode, apiKey, onboarded, lastImport, aiUsage, notif, lastSeenLevel, seenBadges] = meta;
+  const meta = await Promise.all(['profile', 'mode', 'apiKey', 'onboarded', 'lastImport', 'aiUsage', 'notif', 'lastSeenLevel', 'seenBadges', 'syncSecret', 'lastSync'].map((k) => db.getMeta(k)));
+  const [profile, mode, apiKey, onboarded, lastImport, aiUsage, notif, lastSeenLevel, seenBadges, syncSecret, lastSync] = meta;
+  S.syncSecret = typeof syncSecret === 'string' ? syncSecret : null;
+  S.lastSync = /** @type {typeof S.lastSync} */ (lastSync ?? null);
   S.profile = normalizeProfile(profile);
   S.mode = typeof mode === 'string' ? mode : null;
   S.apiKey = typeof apiKey === 'string' && apiKey ? apiKey : null;

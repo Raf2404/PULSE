@@ -280,7 +280,7 @@ await visible().getByRole('heading', { name: 'Qualité des données' }).waitFor(
 assert.equal(await visible().locator('.quality-row').count(), 9);
 await shot('donnees');
 await nav('#/profil/raccourcis');
-await visible().getByRole('heading', { name: 'Créer le raccourci (une fois)' }).waitFor();
+await visible().getByRole('heading', { name: 'Créer le raccourci (une fois, ~10 min)' }).waitFor();
 step('notifications, données (qualité par métrique), Raccourcis');
 
 // ---------------------------------------------------------------- Respiration, rapport, stress
@@ -311,7 +311,42 @@ await page.goto(`${BASE}/#import=${payload}`);
 await page.getByRole('status').filter({ hasText: 'Synchro Raccourcis' }).waitFor({ timeout: 30000 });
 step('import Raccourcis par lien #import=');
 
+// ---------------------------------------------------------------- synchro automatique (raccourci → boîte → PULSE)
+await nav('#/profil/raccourcis');
+await visible().getByRole('button', { name: /Activer la synchro automatique/ }).click();
+await page.getByRole('status').filter({ hasText: 'Synchro activée' }).waitFor();
+const syncAddress = (await visible().locator('.sync-url').textContent())?.trim() ?? '';
+assert.match(syncAddress, /\/api\/sync\/[A-Za-z0-9_-]{43}$/);
+await visible().getByRole('button', { name: 'Tester' }).click();
+await page.getByRole('status').filter({ hasText: 'Circuit OK' }).waitFor();
+await shot('synchro-auto');
+// Ce que le raccourci iOS envoie : 2 derniers jours, noms français, dates ISO 8601
+const { generateDemo } = await import('../site/js/data/demo.js');
+const FR = { hr: 'Fréquence cardiaque', hrv: 'Variabilité de la fréquence cardiaque', rhr: 'Fréquence cardiaque au repos', resp: 'Fréquence respiratoire', spo2: 'Saturation en oxygène', steps: 'Nombre de pas', sleep: 'Analyse du sommeil' };
+const STAGE_FR = { in_bed: 'Au lit', core: 'Essentiel', deep: 'Profond', rem: 'Paradoxal', awake: 'Éveillé' };
+const nowMs = Date.now();
+const recent = generateDemo({ seed: 9 }).samples.filter((x) => x.start >= nowMs - 2 * 86400000 && x.type in FR);
+const lines = recent.map((x) => {
+  const v = x.type === 'sleep' ? STAGE_FR[/** @type {keyof typeof STAGE_FR} */ (x.value)] : x.type === 'spo2' ? String(Number(x.value) / 100).replace('.', ',') : String(x.value).replace('.', ',');
+  return `${FR[/** @type {keyof typeof FR} */ (x.type)]};${v};${x.unit};${new Date(x.start).toISOString()};${new Date(x.end).toISOString()};Apple Watch de Alex`;
+}).join('\n');
+const deposit = await fetch(syncAddress.replace(/^https?:\/\/[^/]+/, BASE), { method: 'POST', body: lines });
+assert.equal(deposit.status, 200);
+await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+await page.reload();
+await page.getByRole('status').filter({ hasText: /Synchro : [\d\s\u202f]+ nouvelles mesures/ }).waitFor({ timeout: 30000 });
+const synced = await page.evaluate(async () => {
+  const { S } = await import('./js/state.js');
+  return { lastSync: S.lastSync, nights: S.records.filter((r) => r.night).length, mode: S.mode };
+});
+assert.equal(synced.mode, 'apple');
+assert.ok((synced.lastSync?.samples ?? 0) > 200 && synced.nights >= 1, JSON.stringify(synced));
+const left = await (await fetch(syncAddress.replace(/^https?:\/\/[^/]+/, BASE))).json();
+assert.equal(left.items.length, 0, 'données supprimées du serveur après relève');
+step(`synchro automatique : dépôt du raccourci relevé à l'ouverture (${synced.lastSync?.samples} mesures), puis effacé du serveur`);
+
 // ---------------------------------------------------------------- PWA et hors connexion
+await nav('#/aujourdhui');
 const manifest = await (await page.request.get(`${BASE}/manifest.webmanifest`)).json();
 assert.equal(manifest.display, 'standalone');
 await page.evaluate(async () => { await navigator.serviceWorker.ready; });

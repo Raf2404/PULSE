@@ -26,7 +26,7 @@ a { color: inherit; }
 h1, h2, h3, p { margin: 0; }
 h3 { font-size: 16px; font-weight: 600; margin-top: 6px; }
 .icon { flex: none; display: block; }
-code { font-size: 13px; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; word-break: break-all; }
+code { font-size: 13px; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
 .center { text-align: center; justify-self: center; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 :focus-visible { outline: 2px solid var(--strain); outline-offset: 3px; border-radius: 6px; }
@@ -485,3 +485,6 @@ dialog .actions { grid-template-columns: 1fr 1fr; }
   .card { border: 0; padding: 0; break-inside: avoid; }
   .reveal { animation: none; }
 }
+
+/* Adresse de synchro automatique */
+.sync-url { display: block; white-space: normal; word-break: break-all; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.4; user-select: all; -webkit-user-select: all; }

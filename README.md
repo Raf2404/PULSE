@@ -33,6 +33,13 @@ Crée une clé sur [console.anthropic.com](https://console.anthropic.com) (compt
 l'usage ; fixe une limite de dépense), puis colle-la dans **Profil → Coach IA** et coche le consentement. La clé reste sur
 ton téléphone ; seuls des résumés chiffrés, sans prénom, partent vers l'API Claude.
 
+## Synchro automatique (recommandé)
+
+Pour ne plus exporter à la main : **Profil → Données → Synchro automatique**, touche **Activer**, copie l'adresse, puis
+crée le raccourci et son automatisation en suivant les étapes affichées (une fois, ~10 min). Chaque matin, à l'arrêt du
+réveil, le raccourci envoie ta nuit à ton site ; PULSE la récupère à l'ouverture et la fait supprimer du serveur
+(sinon effacée après 48 h). Un export complet de temps en temps reste utile pour l'historique des séances.
+
 ## Rappels (facultatif)
 
 Sur iPhone (iOS 16.4+), installe d'abord PULSE sur l'écran d'accueil, puis **Profil → Notifications**. Le petit service de

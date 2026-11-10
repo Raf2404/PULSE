@@ -5,8 +5,9 @@
 - On avance phase par phase (roadmap révisée de la section 0). Ne pas coder une phase future sans demande.
 - Site statique : HTML + CSS + JavaScript en modules ES, sans build, déployé sur Netlify.
   Aucun service payant. Les données de santé restent dans le navigateur (IndexedDB).
-  Seule exception serveur : les fonctions Netlify de rappels push (netlify/functions), qui ne
-  reçoivent jamais de données de santé (abonnement + heures de rappel uniquement).
+  Exceptions serveur (netlify/functions, gratuites) : les rappels push (abonnement + heures de
+  rappel, jamais de données de santé) et la boîte de synchro automatique (/api/sync/<secret>) où le
+  raccourci iOS dépose les mesures récentes : relevées puis supprimées par l'app, effacées après 48 h.
 - JS typé en JSDoc (`// @ts-check`). Pas de dépendance npm à l'exécution côté site : une lib
   indispensable est copiée dans site/js/vendor/ avec sa licence (fflate, SDK Anthropic empaqueté).
   Les fonctions Netlify ont leurs dépendances (web-push, @netlify/blobs) dans package.json.
